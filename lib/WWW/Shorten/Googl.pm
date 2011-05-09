@@ -9,22 +9,36 @@ use base qw( WWW::Shorten::generic Exporter );
 our @EXPORT = qw( makeashorterlink makealongerlink );
 our $VERSION = '0.99';
 
+use JSON qw/to_json from_json/;
+use Net::SSL;
+
 use Carp;
 
-sub makeashorterlink ($)
+sub makeashorterlink
 {
     my $url = shift or croak 'No URL passed to makeashorterlink';
+    my $api_key = shift;
+
     my $ua = __PACKAGE__->ua();
-    my $api_url = 'http://goo.gl/api/url';
-    my $resp = $ua->post($api_url, [
-        url => $url,
-        source => "PerlAPI",
-    ]);
+    my $api_url = 'https://www.googleapis.com/urlshortener/v1/url';
+    my $req_params = { longUrl => $url };
+    
+    if (defined $api_key) {
+        $api_url .= "?key=$api_key";
+    }
+
+    my $resp = $ua->post($api_url,
+                            Content_Type => 'application/json',
+                            Content => to_json($req_params)
+                        );
+
     return undef unless $resp->is_success;
     my $content = $resp->content;
+    
     return undef if $content =~ /Error/;
-    if ($resp->content =~ m!(\Qhttp://goo.gl/\E\w+)!x) {
-        return $1;
+    $content = from_json($content);
+    if ($content->{id} =~ m!(\Qhttp://goo.gl/\E\w+)!x) {
+        return $content->{id};
     }
     return;
 }
@@ -62,12 +76,19 @@ WWW::Shorten::Googl - Perl interface to goo.gl
 
   $short_url = makeashorterlink($long_url);
 
+  $short_url = makeashorterlink($long_url, 'MY_GOOGL_API_KEY');
+
   $long_url  = makealongerlink($short_url);
 
 =head1 DESCRIPTION
 
 A Perl interface to the web site goo.gl. Googl simply maintains
 a database of long URLs, each of which has a unique identifier.
+
+Service is limited for anonymous users. To extend limits you must obtain an API KEY.
+Instructions could be found at L<http://code.google.com/intl/ru/apis/urlshortener/v1/authentication.html#key-get>
+
+API Description could be found at L<http://code.google.com/intl/ru/apis/urlshortener/v1/reference.html>
 
 =head1 Functions
 
@@ -99,5 +120,6 @@ Magnus Erixzon <magnus@erixzon.com>
 =head1 SEE ALSO
 
 L<WWW::Shorten>, L<http://goo.gl/>
+L<http://code.google.com/intl/ru/apis/urlshortener/v1/reference.html>
 
 =cut
